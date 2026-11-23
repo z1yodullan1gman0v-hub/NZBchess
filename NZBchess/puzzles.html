@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — Тактика и задачи</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.brown.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.cburnett.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div class="game-layout">
+      <div class="board-col">
+        <div id="board"></div>
+      </div>
+
+      <div class="sidebar" style="width: 340px;">
+        <div id="status" class="status-banner">Загрузка позиции...</div>
+
+        <div style="display: flex; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border-subtle);">
+          <button id="btnGlobal" class="btn" style="flex: 1;">Мировая база (4M+)</button>
+          <button id="btnMatches" class="btn btn-secondary" style="flex: 1;">Из матчей (<span id="matchCount">0</span>)</button>
+        </div>
+
+        <div id="matchMetaBox" style="display: none; padding: 12px; background: rgba(204, 51, 51, 0.14); border-bottom: 1px solid var(--border-subtle); font-size: 13px;">
+          <div style="font-weight: 700; color: #ff8a80;" id="matchPlayers">Игрок 1 vs Игрок 2</div>
+          <div class="section-sub" style="margin-top: 4px;" id="matchBlunderInfo">Упустил мат</div>
+        </div>
+
+        <div style="padding: 16px; line-height: 1.5; flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <h3 id="pTitle" style="font-size: 16px;">Задача</h3>
+            <span id="pRating" class="elo-tag">1200</span>
+          </div>
+          <p id="pDesc" class="section-sub" style="color: #d6d6d6;">Найдите сильнейший ход.</p>
+          <div id="pThemes" class="section-sub" style="margin-top: 10px; font-size: 12px;"></div>
+          
+          <div style="margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border-subtle); font-size: 13px; color: var(--text-muted);">
+            Решено задач: <b id="solvedCount" style="color: var(--text-main);">0</b>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="nextBtn" class="btn">Следующая задача</button>
+          <button id="hintBtn" class="btn btn-secondary">Показать подсказку</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@8.3.3/chessground.min.js';
+    import { applySavedVisuals, renderSidebar, enableMobileDrawing } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('puzzles');
+
+    const game = new Chess();
+    let cg = null, sourceMode = 'global', solutionMoves = [], stepIndex = 0, playerColor = 'white';
+    let solvedTotal = parseInt(localStorage.getItem('nzb_puzzles')) || 0;
+    document.getElementById('solvedCount').innerText = solvedTotal;
+
+    const FALLBACK = [
+      { id: 'NZB-01', rating: 950, themes: ['Мат в 1 ход'], fen: '6k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1', moves: ['d1d8'] },
+      { id: 'NZB-02', rating: 1100, themes: ['Спёртый мат'], fen: '6rk/6pp/7N/8/8/8/8/7K w - - 0 1', moves: ['h6f7'] }
+    ];
+
+    document.getElementById('btnGlobal').onclick = () => setSource('global');
+    document.getElementById('btnMatches').onclick = () => setSource('matches');
+    document.getElementById('nextBtn').onclick = () => loadNextPuzzle();
+    document.getElementById('hintBtn').onclick = () => {
+      if (stepIndex < solutionMoves.length) {
+        const h = solutionMoves[stepIndex];
+        cg.setShapes([{ orig: h.slice(0, 2), dest: h.slice(2, 4), brush: 'green' }]);
+      }
+    };
+
+    function setSource(mode) {
+      sourceMode = mode;
+      document.getElementById('btnGlobal').className = mode === 'global' ? 'btn' : 'btn btn-secondary';
+      document.getElementById('btnMatches').className = mode === 'matches' ? 'btn' : 'btn btn-secondary';
+      loadNextPuzzle();
+    }
+
+    function dests() {
+      const m = new Map();
+      game.SQUARES.forEach(s => { const ms = game.moves({ square: s, verbose: true }); if (ms.length) m.set(s, ms.map(x => x.to)); });
+      return m;
+    }
+
+    async function fetchGlobal() {
+      try {
+        const res = await fetch('https://lichess.org/api/puzzle/next');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        const tc = new Chess();
+        tc.load_pgn(data.game.pgn);
+        return { id: '#' + data.puzzle.id, rating: data.puzzle.rating, themes: data.puzzle.themes, fen: tc.fen(), moves: data.puzzle.solution };
+      } catch {
+        return FALLBACK[Math.floor(Math.random() * FALLBACK.length)];
+      }
+    }
+
+    async function loadNextPuzzle() {
+      const matchList = JSON.parse(localStorage.getItem('nzb_match_puzzles') || '[]');
+      document.getElementById('matchCount').innerText = matchList.length;
+      const st = document.getElementById('status');
+      st.innerText = 'Загрузка...';
+      st.style.color = 'var(--text-muted)';
+
+      let pData = null;
+      if (sourceMode === 'matches') {
+        if (!matchList.length) {
+          st.innerText = 'Архив пуст';
+          document.getElementById('pTitle').innerText = 'Нет сохранённых партий';
+          document.getElementById('pDesc').innerText = 'Упущенные маты из матчей 1 на 1 появятся здесь автоматически.';
+          document.getElementById('matchMetaBox').style.display = 'none';
+          return;
+        }
+        const raw = matchList[Math.floor(Math.random() * matchList.length)];
+        pData = { id: 'Матч 1v1', rating: 'LIVE', themes: [`Мат в ${raw.depth} ход`], fen: raw.fen, moves: [raw.solution], meta: raw };
+      } else {
+        pData = await fetchGlobal();
+      }
+
+      game.load(pData.fen);
+      solutionMoves = pData.moves;
+      stepIndex = 0;
+      playerColor = game.turn() === 'w' ? 'white' : 'black';
+
+      if (pData.meta) {
+        document.getElementById('matchMetaBox').style.display = 'block';
+        document.getElementById('matchPlayers').innerText = `${pData.meta.white} vs ${pData.meta.black}`;
+        document.getElementById('matchBlunderInfo').innerText = `Упустил мат: ${pData.meta.blunderer}`;
+      } else {
+        document.getElementById('matchMetaBox').style.display = 'none';
+      }
+
+      document.getElementById('pTitle').innerText = `Задача ${pData.id}`;
+      document.getElementById('pRating').innerText = pData.rating;
+      document.getElementById('pDesc').innerText = playerColor === 'white' ? 'Ход белых. Найдите сильнейшее продолжение.' : 'Ход чёрных. Найдите сильнейшее продолжение.';
+      document.getElementById('pThemes').innerText = 'Темы: ' + (pData.themes || []).join(', ');
+      st.innerText = playerColor === 'white' ? 'Ваш ход (Белые)' : 'Ваш ход (Чёрные)';
+      st.style.color = 'var(--accent)';
+
+      cg = Chessground(document.getElementById('board'), {
+        fen: game.fen(), orientation: playerColor, turnColor: playerColor,
+        movable: { color: playerColor, free: false, dests: dests(), events: { after: onMove } },
+        drawable: { enabled: true, visible: true }
+      });
+      enableMobileDrawing(cg, 'board');
+    }
+
+    function onMove(orig, dest) {
+      const exp = solutionMoves[stepIndex];
+      const move = game.move({ from: orig, to: dest, promotion: exp.length === 5 ? exp[4] : 'q' });
+      if (!move) return;
+
+      const played = orig + dest + (move.promotion || '');
+      const st = document.getElementById('status');
+
+      if (played.startsWith(exp.slice(0, 4)) || game.in_checkmate()) {
+        stepIndex++;
+        if (stepIndex < solutionMoves.length && !game.in_checkmate()) {
+          st.innerText = 'Верно, продолжайте...';
+          cg.set({ fen: game.fen(), movable: { color: null } });
+          setTimeout(() => {
+            const rep = solutionMoves[stepIndex];
+            game.move({ from: rep.slice(0, 2), to: rep.slice(2, 4), promotion: rep[4] || 'q' });
+            stepIndex++;
+            cg.set({ fen: game.fen(), turnColor: playerColor, check: game.in_check(), movable: { color: playerColor, dests: dests() } });
+            st.innerText = 'Ваш следующий ход';
+          }, 350);
+        } else {
+          cg.set({ fen: game.fen(), movable: { color: null } });
+          st.innerText = 'Задача решена';
+          st.style.color = 'var(--accent)';
+          solvedTotal++;
+          localStorage.setItem('nzb_puzzles', solvedTotal);
+          document.getElementById('solvedCount').innerText = solvedTotal;
+        }
+      } else {
+        st.innerText = 'Неточный ход';
+        st.style.color = 'var(--danger)';
+        setTimeout(() => {
+          game.undo();
+          cg.set({ fen: game.fen(), turnColor: playerColor, movable: { color: playerColor, dests: dests() } });
+        }, 400);
+      }
+    }
+
+    loadNextPuzzle();
+  </script>
+</body>
+</html>

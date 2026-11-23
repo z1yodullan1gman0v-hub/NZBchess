@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — Шахматная платформа</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div class="card-box">
+      <div class="section-header">
+        <div>
+          <h2>Профиль игрока</h2>
+          <p class="section-sub">Уникальный никнейм и аватар отображаются в сетевых матчах</p>
+        </div>
+        <span class="elo-tag" id="mainEloTag">800 ELO</span>
+      </div>
+
+      <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 18px; border-radius: 8px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <img id="mainAvatar" class="avatar-circle" style="width: 56px; height: 56px;" src="" alt="Avatar">
+        
+        <label class="btn btn-secondary" style="cursor: pointer;">
+          Загрузить фото
+          <input type="file" accept="image/*" style="display: none;" id="avatarInput">
+        </label>
+
+        <div style="flex: 1; min-width: 240px;">
+          <div style="display: flex; gap: 8px;">
+            <input id="nickInput" class="input-field" placeholder="Введите уникальный ник..." maxlength="16">
+            <button id="saveNickBtn" class="btn">Сохранить</button>
+          </div>
+          <div id="nickStatus" style="font-size: 12px; margin-top: 6px; font-weight: 600;"></div>
+        </div>
+      </div>
+
+      <div class="menu-grid">
+        <a href="online.html" class="menu-tile">
+          <h3>Игра 1 на 1 (Сеть LAN)</h3>
+          <p>Прямое P2P-соединение между двумя компьютерами по коду комнаты. Автоматическая победа при выходе соперника.</p>
+        </a>
+
+        <a href="bots.html" class="menu-tile">
+          <h3>Тренировка с ботами</h3>
+          <p>15 соперников от 400 до 2500 ELO в 6 лигах с голосовым разбором ходов и конструктор своего бота.</p>
+        </a>
+
+        <a href="puzzles.html" class="menu-tile">
+          <h3>Тактические задачи</h3>
+          <p>Мировая база из 4 000 000+ позиций и автоматический архив упущенных матов из ваших партий 1 на 1.</p>
+        </a>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script type="module">
+    import { applySavedVisuals, renderSidebar, DEFAULT_AVATAR } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('index');
+
+    const nick = localStorage.getItem('nzb_nick') || '';
+    const elo = localStorage.getItem('nzb_elo') || '800';
+    const avatar = localStorage.getItem('nzb_avatar') || DEFAULT_AVATAR;
+
+    document.getElementById('nickInput').value = nick;
+    document.getElementById('mainEloTag').innerText = `${elo} ELO`;
+    document.getElementById('mainAvatar').src = avatar;
+
+    let nickLockPeer = null;
+    if (nick) holdNick(nick);
+
+    function holdNick(name) {
+      const cleanId = 'nzb-user-' + name.toLowerCase().replace(/[^a-z0-9а-яё_-]/g, '');
+      if (nickLockPeer) nickLockPeer.destroy();
+      nickLockPeer = new Peer(cleanId);
+    }
+
+    document.getElementById('saveNickBtn').addEventListener('click', () => {
+      const raw = document.getElementById('nickInput').value.trim();
+      const statusEl = document.getElementById('nickStatus');
+      const btn = document.getElementById('saveNickBtn');
+
+      if (raw.length < 2) {
+        statusEl.style.color = 'var(--danger)';
+        statusEl.innerText = 'Минимум 2 символа.';
+        return;
+      }
+
+      const current = localStorage.getItem('nzb_nick') || '';
+      if (raw.toLowerCase() === current.toLowerCase()) {
+        statusEl.style.color = 'var(--accent)';
+        statusEl.innerText = `Ник «${raw}» закреплён за вами.`;
+        return;
+      }
+
+      btn.disabled = true;
+      statusEl.style.color = 'var(--text-muted)';
+      statusEl.innerText = 'Проверка доступности имени...';
+
+      const targetId = 'nzb-user-' + raw.toLowerCase().replace(/[^a-z0-9а-яё_-]/g, '');
+      const testPeer = new Peer(targetId);
+
+      testPeer.on('open', () => {
+        if (nickLockPeer) nickLockPeer.destroy();
+        nickLockPeer = testPeer;
+        localStorage.setItem('nzb_nick', raw);
+        document.getElementById('sideNick').innerText = raw;
+        statusEl.style.color = 'var(--accent)';
+        statusEl.innerText = `Ник «${raw}» успешно занят.`;
+        btn.disabled = false;
+      });
+
+      testPeer.on('error', (err) => {
+        testPeer.destroy();
+        statusEl.style.color = 'var(--danger)';
+        statusEl.innerText = err.type === 'unavailable-id'
+          ? `Имя «${raw}» уже занято другим игроком.`
+          : 'Ошибка сети при проверке.';
+        btn.disabled = false;
+      });
+    });
+
+    document.getElementById('avatarInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 120;
+          canvas.height = 120;
+          canvas.getContext('2d').drawImage(img, 0, 0, 120, 120);
+          const url = canvas.toDataURL('image/jpeg', 0.8);
+          localStorage.setItem('nzb_avatar', url);
+          document.getElementById('mainAvatar').src = url;
+          document.getElementById('sideAvatar').src = url;
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — 1 на 1 (Сеть LAN)</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.brown.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.cburnett.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div id="lobbyScreen" class="card-box" style="width: 680px;">
+      <div class="section-header">
+        <div>
+          <h2>Игра 1 на 1 (Локальная сеть)</h2>
+          <p class="section-sub">P2P-подключение • Часы, предходы, дебюты и оценка позиции</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 20px; border-radius: 8px; display: flex; flex-direction: column;">
+          <h3 style="font-size: 15px; margin-bottom: 6px;">Создать комнату (Белые)</h3>
+          <p class="section-sub" style="margin-bottom: 10px;">Выберите контроль времени для матча:</p>
+          <select id="lanTimeSelect" style="margin-bottom: 12px;">
+            <option value="0|0">Без часов</option>
+            <option value="60|0">1+0 (Пуля)</option>
+            <option value="180|0">3+0 (Блиц)</option>
+            <option value="180|2" selected>3+2 (Блиц)</option>
+            <option value="300|0">5+0 (Блиц)</option>
+            <option value="600|0">10+0 (Рапид)</option>
+          </select>
+          <button id="createBtn" class="btn">Создать комнату</button>
+          <div id="roomCodeDisplay" style="margin-top: 14px; font-family: monospace; font-size: 24px; font-weight: 800; color: var(--accent); text-align: center; letter-spacing: 3px;"></div>
+        </div>
+
+        <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 20px; border-radius: 8px; display: flex; flex-direction: column;">
+          <h3 style="font-size: 15px; margin-bottom: 6px;">Подключиться (Чёрные)</h3>
+          <p class="section-sub" style="margin-bottom: 12px; flex: 1;">Введите код комнаты хоста</p>
+          <input id="joinCodeInput" class="input-field" style="text-align: center; font-family: monospace; font-weight: 700; letter-spacing: 4px; margin-bottom: 10px;" placeholder="0000" maxlength="4">
+          <button id="joinBtn" class="btn btn-secondary">Войти в игру</button>
+        </div>
+      </div>
+
+      <div id="connectionStatus" style="margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--accent); text-align: center;"></div>
+    </div>
+
+    <div id="gameScreen" class="game-layout" style="display: none;">
+      <div class="board-col">
+        <div class="player-bar">
+          <div style="display: flex; align-items: center; flex-wrap: wrap;">
+            <span id="oppName">Соперник</span>
+            <span id="oppCapturedStrip" class="captured-strip"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="oppColorBadge" class="section-sub">Чёрные</span>
+            <div id="oppClock" class="clock-box" style="display: none;">03:00</div>
+          </div>
+        </div>
+
+        <div class="board-with-eval">
+          <div id="evalBarOuter" class="eval-bar-outer" title="Оценка позиции">
+            <div id="evalBarWhite" class="eval-bar-white" style="height: 50%;"></div>
+            <div id="evalBarScore" class="eval-bar-score adv-white">0.0</div>
+          </div>
+          <div id="board"></div>
+        </div>
+
+        <div class="player-bar">
+          <div style="display: flex; align-items: center; flex-wrap: wrap;">
+            <span id="myName">Вы</span>
+            <span id="myCapturedStrip" class="captured-strip"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="myColorBadge" style="color: var(--accent); font-size: 13px;">Белые</span>
+            <div id="myClock" class="clock-box" style="display: none;">03:00</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <div id="gameStatus" class="status-banner">Ход белых</div>
+        <div id="openingBanner" class="opening-banner">Начальная позиция</div>
+
+        <div id="drawOfferBox" style="display: none; padding: 10px 12px; background: rgba(98, 153, 36, 0.16); border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
+          <div style="font-weight: 700; margin-bottom: 8px; text-align: center;">Соперник предлагает ничью</div>
+          <div style="display: flex; gap: 6px;">
+            <button id="acceptDrawBtn" class="btn" style="flex: 1; padding: 6px;">Принять</button>
+            <button id="declineDrawBtn" class="btn btn-secondary" style="flex: 1; padding: 6px;">Отклонить</button>
+          </div>
+        </div>
+
+        <div id="moveHistory" class="history-list"></div>
+        <div class="controls">
+          <div style="display: flex; gap: 6px;">
+            <button id="offerDrawBtn" class="btn btn-secondary" style="flex: 1;">Ничья</button>
+            <button id="resignBtn" class="btn btn-secondary" style="flex: 1; color: #ff8a80;">Сдаться</button>
+            <button id="flipLanBtn" class="btn btn-secondary" title="Перевернуть доску">Поворот</button>
+          </div>
+          <button id="resetBtn" class="btn">Новая партия</button>
+          <button id="leaveBtn" class="btn btn-secondary">Покинуть матч</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="promoModal" class="modal-overlay">
+    <div class="modal-box" style="text-align: center;">
+      <h3 style="margin-bottom: 14px;">Выберите фигуру</h3>
+      <div style="display: flex; gap: 8px; justify-content: center;">
+        <button class="btn" data-piece="q">Ферзь</button>
+        <button class="btn" data-piece="r">Ладья</button>
+        <button class="btn" data-piece="b">Слон</button>
+        <button class="btn" data-piece="n">Конь</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@8.3.3/chessground.min.js';
+    import {
+      applySavedVisuals, renderSidebar, DEFAULT_AVATAR, showMatchResultModal,
+      rememberNetworkPlayer, enableMobileDrawing, playChessSound, formatClock,
+      detectOpeningName, getCapturedMaterial, getWhiteAdvantagePawns
+    } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('online');
+
+    const game = new Chess();
+    let cg = null, peer = null, conn = null, myColor = 'w', boardOrient = 'white', pendingMove = null, isGameOver = false, pingInterval = null;
+    const myNick = localStorage.getItem('nzb_nick') || 'Player_NZB';
+    const myAvatar = localStorage.getItem('nzb_avatar') || DEFAULT_AVATAR;
+    let oppNickGlobal = 'Соперник', oppAvatarGlobal = DEFAULT_AVATAR, oppEloGlobal = 800;
+    let missedMates = [];
+    let timeBase = 0, timeInc = 0, myTime = 0, oppTime = 0, clockTimer = null;
+
+    const peerConfig = { config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } };
+
+    document.getElementById('flipLanBtn').onclick = () => {
+      boardOrient = boardOrient === 'white' ? 'black' : 'white';
+      if (cg) cg.set({ orientation: boardOrient });
+      document.getElementById('evalBarOuter').classList.toggle('flipped', boardOrient === 'black');
+    };
+
+    function updateLanEvalAndMaterial() {
+      const adv = getWhiteAdvantagePawns(game);
+      document.getElementById('evalBarWhite').style.height = `${adv.whitePct}%`;
+      const scoreEl = document.getElementById('evalBarScore');
+      scoreEl.innerText = adv.text;
+      scoreEl.className = 'eval-bar-score ' + (adv.isWhiteAdv ? 'adv-white' : 'adv-black');
+
+      const mat = getCapturedMaterial(game);
+      document.getElementById('myCapturedStrip').innerHTML = myColor === 'w' ? mat.byWhiteHtml : mat.byBlackHtml;
+      document.getElementById('oppCapturedStrip').innerHTML = myColor === 'w' ? mat.byBlackHtml : mat.byWhiteHtml;
+
+      document.getElementById('openingBanner').innerText = detectOpeningName(game.history());
+    }
+
+    document.getElementById('createBtn').onclick = () => {
+      const code = Math.floor(1000 + Math.random() * 9000).toString();
+      const [tB, tI] = document.getElementById('lanTimeSelect').value.split('|').map(Number);
+      timeBase = tB; timeInc = tI;
+
+      document.getElementById('roomCodeDisplay').innerText = code;
+      document.getElementById('connectionStatus').innerText = 'Ожидание подключения второго игрока...';
+
+      if (peer) peer.destroy();
+      peer = new Peer('nzb-lan-' + code, peerConfig);
+      peer.on('connection', (c) => {
+        conn = c; myColor = 'w'; setupConn();
+        conn.on('open', () => {
+          const myElo = parseInt(localStorage.getItem('nzb_elo')) || 800;
+          conn.send({ type: 'handshake', nick: myNick, avatar: myAvatar, elo: myElo, timeBase, timeInc });
+          startMatch('Соперник', DEFAULT_AVATAR);
+        });
+      });
+    };
+
+    document.getElementById('joinBtn').onclick = () => {
+      const code = document.getElementById('joinCodeInput').value.trim();
+      if (code.length !== 4) return document.getElementById('connectionStatus').innerText = 'Введите 4 цифры кода.';
+      document.getElementById('connectionStatus').innerText = 'Подключение...';
+
+      if (peer) peer.destroy();
+      peer = new Peer(peerConfig);
+      peer.on('open', () => {
+        conn = peer.connect('nzb-lan-' + code, { reliable: true });
+        myColor = 'b'; setupConn();
+        conn.on('open', () => {
+          const myElo = parseInt(localStorage.getItem('nzb_elo')) || 800;
+          conn.send({ type: 'handshake', nick: myNick, avatar: myAvatar, elo: myElo });
+          startMatch('Хост', DEFAULT_AVATAR);
+        });
+      });
+    };
+
+    function setupConn() {
+      let lastPong = Date.now();
+      clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        if (!conn || !conn.open || isGameOver) return;
+        if (Date.now() - lastPong > 4000) return finishLanMatch(true, false, 'Соперник потерял соединение');
+        conn.send({ type: 'ping' });
+      }, 1500);
+
+      conn.on('data', (d) => {
+        lastPong = Date.now();
+        if (d.type === 'ping') conn.send({ type: 'pong' });
+        else if (d.type === 'handshake') {
+          oppNickGlobal = d.nick;
+          oppAvatarGlobal = d.avatar || DEFAULT_AVATAR;
+          oppEloGlobal = d.elo || 800;
+          rememberNetworkPlayer(oppNickGlobal, oppEloGlobal);
+          renderBadge('oppName', `${oppNickGlobal} (${oppEloGlobal})`, oppAvatarGlobal);
+          if (typeof d.timeBase === 'number') {
+            timeBase = d.timeBase; timeInc = d.timeInc;
+            myTime = timeBase; oppTime = timeBase;
+            startLanClocks();
+          }
+        } else if (d.type === 'move' && !isGameOver) {
+          recordMissedMate(d.move);
+          const exec = game.move(d.move);
+          if (timeBase > 0) oppTime += timeInc;
+          if (exec) triggerSound(exec);
+          sync(); updateUI();
+        } else if (d.type === 'reset') {
+          resetLocalState();
+        } else if (d.type === 'leave') {
+          finishLanMatch(true, false, 'Соперник покинул матч');
+        } else if (d.type === 'resign') {
+          finishLanMatch(true, false, `${oppNickGlobal} сдался`);
+        } else if (d.type === 'draw_offer') {
+          document.getElementById('drawOfferBox').style.display = 'block';
+        } else if (d.type === 'draw_accept') {
+          finishLanMatch(false, true, 'Ничья по соглашению сторон');
+        } else if (d.type === 'draw_decline') {
+          document.getElementById('gameStatus').innerText = 'Соперник отклонил ничью';
+        } else if (d.type === 'new_puzzle') {
+          savePuzzle(d.puzzle);
+        }
+      });
+
+      conn.on('close', () => finishLanMatch(true, false, 'Соперник отключился'));
+    }
+
+    document.getElementById('resignBtn').onclick = () => {
+      if (isGameOver) return;
+      if (conn && conn.open) conn.send({ type: 'resign' });
+      finishLanMatch(false, false, 'Вы сдались');
+    };
+
+    document.getElementById('offerDrawBtn').onclick = () => {
+      if (isGameOver || !conn || !conn.open) return;
+      conn.send({ type: 'draw_offer' });
+      document.getElementById('gameStatus').innerText = 'Предложение ничьей отправлено...';
+    };
+
+    document.getElementById('acceptDrawBtn').onclick = () => {
+      document.getElementById('drawOfferBox').style.display = 'none';
+      if (conn && conn.open) conn.send({ type: 'draw_accept' });
+      finishLanMatch(false, true, 'Ничья по соглашению сторон');
+    };
+
+    document.getElementById('declineDrawBtn').onclick = () => {
+      document.getElementById('drawOfferBox').style.display = 'none';
+      if (conn && conn.open) conn.send({ type: 'draw_decline' });
+    };
+
+    function startLanClocks() {
+      clearInterval(clockTimer);
+      const myEl = document.getElementById('myClock');
+      const oppEl = document.getElementById('oppClock');
+      if (timeBase <= 0) {
+        myEl.style.display = 'none'; oppEl.style.display = 'none'; return;
+      }
+      myEl.style.display = 'block'; oppEl.style.display = 'block';
+      updateLanClockUI();
+
+      clockTimer = setInterval(() => {
+        if (isGameOver) return clearInterval(clockTimer);
+        if (game.turn() === myColor) {
+          myTime -= 0.2;
+          if (myTime <= 0) {
+            myTime = 0; updateLanClockUI();
+            finishLanMatch(false, false, 'Ваше время истекло');
+          }
+        } else {
+          oppTime -= 0.2;
+          if (oppTime <= 0) {
+            oppTime = 0; updateLanClockUI();
+            finishLanMatch(true, false, 'У соперника закончилось время');
+          }
+        }
+        updateLanClockUI();
+      }, 200);
+    }
+
+    function updateLanClockUI() {
+      const myEl = document.getElementById('myClock');
+      const oppEl = document.getElementById('oppClock');
+      myEl.innerText = formatClock(myTime);
+      oppEl.innerText = formatClock(oppTime);
+      myEl.className = 'clock-box' + (game.turn() === myColor && !isGameOver ? (myTime <= 15 ? ' low-time' : ' active-clock') : '');
+      oppEl.className = 'clock-box' + (game.turn() !== myColor && !isGameOver ? (oppTime <= 15 ? ' low-time' : ' active-clock') : '');
+    }
+
+    function triggerSound(exec) {
+      if (game.in_check()) playChessSound('check');
+      else if (exec.captured) playChessSound('capture');
+      else playChessSound('move');
+    }
+
+    function findForcedMate(c) {
+      for (let m of c.moves({ verbose: true })) {
+        c.move(m);
+        const mate = c.in_checkmate();
+        c.undo();
+        if (mate) return { uci: m.from + m.to, san: m.san, depth: 1 };
+      }
+      return null;
+    }
+
+    function recordMissedMate(moveObj) {
+      const fen = game.fen();
+      const turn = game.turn();
+      const mate = findForcedMate(game);
+      if (mate && (moveObj.from + moveObj.to) !== mate.uci) {
+        const w = myColor === 'w' ? myNick : oppNickGlobal;
+        const b = myColor === 'b' ? myNick : oppNickGlobal;
+        missedMates.push({
+          fen, solution: mate.uci, san: mate.san, depth: mate.depth, turn,
+          white: w, black: b, blunderer: turn === 'w' ? w : b,
+          date: new Date().toLocaleDateString('ru-RU')
+        });
+      }
+    }
+
+    function savePuzzle(p) {
+      const list = JSON.parse(localStorage.getItem('nzb_match_puzzles') || '[]');
+      if (!list.some(x => x.fen === p.fen)) {
+        list.unshift(p);
+        localStorage.setItem('nzb_match_puzzles', JSON.stringify(list));
+      }
+    }
+
+    function renderBadge(id, text, avatar) {
+      document.getElementById(id).innerHTML = `<span style="display:inline-flex;align-items:center;gap:10px;"><img src="${avatar}" class="avatar-sm"><span>${text}</span></span>`;
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (conn && conn.open && !isGameOver) conn.send({ type: 'leave' });
+    });
+
+    function finishLanMatch(iWon, isDraw, reason) {
+      if (isGameOver) return;
+      isGameOver = true;
+      clearInterval(pingInterval);
+      clearInterval(clockTimer);
+      document.getElementById('drawOfferBox').style.display = 'none';
+
+      const st = document.getElementById('gameStatus');
+      st.innerText = isDraw ? `Ничья — ${reason}` : (iWon ? `Победа — ${reason}` : `Поражение — ${reason}`);
+      st.style.color = isDraw ? 'var(--text-muted)' : (iWon ? 'var(--accent)' : 'var(--danger)');
+      if (cg) cg.set({ movable: { color: null } });
+
+      showMatchResultModal({
+        isWin: iWon,
+        isDraw: isDraw,
+        reason: reason,
+        oppName: oppNickGlobal,
+        oppCodeOrAvatar: oppAvatarGlobal,
+        oppElo: oppEloGlobal,
+        onRematch: () => {
+          resetLocalState();
+          if (conn && conn.open) conn.send({ type: 'reset' });
+        }
+      });
+
+      const updatedMyElo = localStorage.getItem('nzb_elo') || 800;
+      renderBadge('myName', `${myNick} (${updatedMyElo})`, myAvatar);
+    }
+
+    function resetLocalState() {
+      isGameOver = false;
+      missedMates = [];
+      myTime = timeBase;
+      oppTime = timeBase;
+      document.getElementById('drawOfferBox').style.display = 'none';
+      game.reset();
+      updateLanEvalAndMaterial();
+      startLanClocks();
+      sync();
+      updateUI();
+    }
+
+    function dests() {
+      const m = new Map();
+      game.SQUARES.forEach(s => { const ms = game.moves({ square: s, verbose: true }); if (ms.length) m.set(s, ms.map(x => x.to)); });
+      return m;
+    }
+
+    function startMatch(oppNick, oppAvatar) {
+      isGameOver = false; missedMates = []; oppNickGlobal = oppNick;
+      myTime = timeBase; oppTime = timeBase;
+      boardOrient = myColor === 'w' ? 'white' : 'black';
+
+      document.getElementById('lobbyScreen').style.display = 'none';
+      document.getElementById('gameScreen').style.display = 'flex';
+      const myElo = localStorage.getItem('nzb_elo') || 800;
+
+      renderBadge('myName', `${myNick} (${myElo})`, myAvatar);
+      renderBadge('oppName', oppNick, oppAvatar);
+      document.getElementById('myColorBadge').innerText = myColor === 'w' ? 'Белые' : 'Чёрные';
+      document.getElementById('oppColorBadge').innerText = myColor === 'w' ? 'Чёрные' : 'Белые';
+      document.getElementById('evalBarOuter').classList.toggle('flipped', boardOrient === 'black');
+
+      game.reset();
+      cg = Chessground(document.getElementById('board'), {
+        fen: game.fen(), orientation: boardOrient, turnColor: 'white',
+        movable: { color: boardOrient, free: false, dests: myColor === 'w' ? dests() : new Map(), events: { after: onMove } },
+        premovable: { enabled: true, showDests: true, castle: true },
+        drawable: { enabled: true, visible: true }
+      });
+      enableMobileDrawing(cg, 'board');
+      updateLanEvalAndMaterial();
+      startLanClocks();
+      updateUI();
+    }
+
+    function sync() {
+      const orient = myColor === 'w' ? 'white' : 'black';
+      const active = !isGameOver && !game.game_over();
+      cg.set({
+        fen: game.fen(),
+        turnColor: game.turn() === 'w' ? 'white' : 'black',
+        check: game.in_check(),
+        movable: { color: active ? orient : null, dests: active && game.turn() === myColor ? dests() : new Map() }
+      });
+      updateLanEvalAndMaterial();
+      if (active && game.turn() === myColor) {
+        cg.playPremove();
+      }
+    }
+
+    function onMove(orig, dest) {
+      if (isGameOver || game.turn() !== myColor) return;
+      const p = game.get(orig);
+      if (p && p.type === 'p' && ((p.color === 'w' && dest[1] === '8') || (p.color === 'b' && dest[1] === '1'))) {
+        pendingMove = { from: orig, to: dest };
+        document.getElementById('promoModal').style.display = 'flex';
+        return;
+      }
+      commit({ from: orig, to: dest });
+    }
+
+    document.querySelectorAll('#promoModal button').forEach(b => {
+      b.onclick = () => {
+        document.getElementById('promoModal').style.display = 'none';
+        commit({ from: pendingMove.from, to: pendingMove.to, promotion: b.dataset.piece });
+      };
+    });
+
+    function commit(m) {
+      if (isGameOver) return;
+      recordMissedMate(m);
+      const exec = game.move(m);
+      if (!exec) return;
+      if (timeBase > 0) myTime += timeInc;
+      triggerSound(exec);
+      if (conn && conn.open) conn.send({ type: 'move', move: m });
+      sync(); updateUI();
+    }
+
+    function updateUI() {
+      if (isGameOver) return;
+      const st = document.getElementById('gameStatus');
+      if (game.in_checkmate()) {
+        const winCol = game.turn() === 'w' ? 'b' : 'w';
+        const iWon = winCol === myColor;
+
+        const miss = missedMates.reverse().find(x => x.turn !== winCol);
+        if (miss) {
+          savePuzzle(miss);
+          if (conn && conn.open) conn.send({ type: 'new_puzzle', puzzle: miss });
+        }
+
+        finishLanMatch(iWon, false, iWon ? 'Победа матом' : `${oppNickGlobal} поставил мат`);
+      } else if (game.in_draw()) {
+        finishLanMatch(false, true, 'Пат или ничья');
+      } else {
+        st.innerText = (game.turn() === 'w' ? 'Ход белых' : 'Ход чёрных') + (game.in_check() ? ' (Шах)' : '');
+        st.style.color = 'var(--accent)';
+      }
+      const h = game.history();
+      const box = document.getElementById('moveHistory');
+      box.innerHTML = h.map((x, i) => i % 2 === 0 ? `<div class="move-row"><span class="move-num">${i/2+1}.</span><span class="move-w">${x}</span><span class="move-b">${h[i+1]||''}</span></div>` : '').join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    document.getElementById('resetBtn').onclick = () => {
+      resetLocalState();
+      if (conn && conn.open) conn.send({ type: 'reset' });
+    };
+    document.getElementById('leaveBtn').onclick = () => {
+      if (conn && conn.open && !isGameOver) conn.send({ type: 'leave' });
+      clearInterval(clockTimer);
+      setTimeout(() => { if (peer) peer.destroy(); location.href = 'index.html'; }, 100);
+    };
+  </script>
+</body>
+</html>

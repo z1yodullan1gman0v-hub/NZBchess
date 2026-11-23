@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — Редактор доски</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.brown.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.cburnett.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div class="game-layout">
+      <div class="board-col">
+        <div id="board"></div>
+      </div>
+
+      <div class="sidebar" style="width: 340px;">
+        <div class="status-banner">Редактор позиций (FEN)</div>
+
+        <div style="padding: 14px; flex: 1; overflow-y: auto;">
+          <p class="section-sub" style="margin-bottom: 8px;">Выберите инструмент и кликните по клетке:</p>
+
+          <!-- Палитра фигур -->
+          <div class="editor-palette" id="piecePalette">
+            <button class="editor-piece-btn selected-tool" data-tool="move" title="Перетаскивать фигуры">✋</button>
+            <button class="editor-piece-btn" data-tool="erase" title="Удалить фигуру">✕</button>
+            <button class="editor-piece-btn" data-tool="wK">♔</button>
+            <button class="editor-piece-btn" data-tool="wQ">♕</button>
+            <button class="editor-piece-btn" data-tool="wR">♖</button>
+            <button class="editor-piece-btn" data-tool="wB">♗</button>
+            <button class="editor-piece-btn" data-tool="wN">♘</button>
+            <button class="editor-piece-btn" data-tool="wP">♙</button>
+            <button class="editor-piece-btn" data-tool="bK">♚</button>
+            <button class="editor-piece-btn" data-tool="bQ">♛</button>
+            <button class="editor-piece-btn" data-tool="bR">♜</button>
+            <button class="editor-piece-btn" data-tool="bB">♝</button>
+            <button class="editor-piece-btn" data-tool="bN">♞</button>
+            <button class="editor-piece-btn" data-tool="bP">♟</button>
+          </div>
+
+          <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button id="startPosBtn" class="btn btn-secondary" style="flex: 1;">Начальная</button>
+            <button id="clearPosBtn" class="btn btn-secondary" style="flex: 1;">Очистить доску</button>
+            <button id="flipEditorBtn" class="btn btn-secondary">Перевернуть</button>
+          </div>
+
+          <label class="section-sub">Очередь хода:</label>
+          <select id="turnSelect" style="margin: 6px 0 12px;">
+            <option value="w" selected>Ход белых</option>
+            <option value="b">Ход чёрных</option>
+          </select>
+
+          <label class="section-sub">FEN-код позиции:</label>
+          <input id="fenOutput" class="input-field" style="margin-top: 6px; font-family: monospace; font-size: 12px;" readonly>
+        </div>
+
+        <div class="controls">
+          <button id="playFromPosBtn" class="btn">Играть с ботом с этой позиции</button>
+          <button id="copyFenBtn" class="btn btn-secondary">Скопировать FEN</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@8.3.3/chessground.min.js';
+    import { applySavedVisuals, renderSidebar } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('editor');
+
+    const chess = new Chess();
+    let currentTool = 'move';
+    let orientation = 'white';
+
+    const ROLE_MAP = { K: 'king', Q: 'queen', R: 'rook', B: 'bishop', N: 'knight', P: 'pawn' };
+    const TYPE_MAP = { K: 'k', Q: 'q', R: 'r', B: 'b', N: 'n', P: 'p' };
+
+    const cg = Chessground(document.getElementById('board'), {
+      fen: chess.fen(),
+      movable: {
+        free: true,
+        color: 'both',
+        events: {
+          after: (orig, dest) => {
+            const p = chess.remove(orig);
+            if (p) chess.put(p, dest);
+            syncFen();
+          }
+        }
+      },
+      events: {
+        select: (key) => {
+          if (currentTool === 'move') return;
+          if (currentTool === 'erase') {
+            chess.remove(key);
+            cg.setPieces(new Map([[key, undefined]]));
+          } else {
+            const color = currentTool[0];
+            const pieceChar = currentTool[1];
+            chess.put({ type: TYPE_MAP[pieceChar], color }, key);
+            cg.setPieces(new Map([[key, { color: color === 'w' ? 'white' : 'black', role: ROLE_MAP[pieceChar] }]]));
+          }
+          syncFen();
+        }
+      }
+    });
+
+    function syncFen() {
+      const turn = document.getElementById('turnSelect').value;
+      const parts = chess.fen().split(' ');
+      parts[1] = turn;
+      const fullFen = parts.join(' ');
+      document.getElementById('fenOutput').value = fullFen;
+    }
+
+    document.querySelectorAll('#piecePalette button').forEach(btn => {
+      btn.onclick = () => {
+        currentTool = btn.dataset.tool;
+        document.querySelectorAll('#piecePalette button').forEach(b => b.classList.remove('selected-tool'));
+        btn.classList.add('selected-tool');
+        cg.set({ movable: { free: currentTool === 'move', color: currentTool === 'move' ? 'both' : null } });
+      };
+    });
+
+    document.getElementById('startPosBtn').onclick = () => {
+      chess.reset();
+      cg.set({ fen: chess.fen() });
+      syncFen();
+    };
+
+    document.getElementById('clearPosBtn').onclick = () => {
+      chess.clear();
+      cg.set({ fen: '8/8/8/8/8/8/8/8 w - - 0 1' });
+      syncFen();
+    };
+
+    document.getElementById('flipEditorBtn').onclick = () => {
+      orientation = orientation === 'white' ? 'black' : 'white';
+      cg.set({ orientation });
+    };
+
+    document.getElementById('turnSelect').onchange = syncFen;
+
+    document.getElementById('copyFenBtn').onclick = () => {
+      navigator.clipboard.writeText(document.getElementById('fenOutput').value);
+      document.getElementById('copyFenBtn').innerText = 'FEN скопирован';
+      setTimeout(() => document.getElementById('copyFenBtn').innerText = 'Скопировать FEN', 1500);
+    };
+
+    document.getElementById('playFromPosBtn').onclick = () => {
+      const fen = document.getElementById('fenOutput').value;
+      localStorage.setItem('nzb_custom_start_fen', fen);
+      location.href = 'bots.html';
+    };
+
+    syncFen();
+  </script>
+</body>
+</html>

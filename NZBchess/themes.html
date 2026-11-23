@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — Оформление</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.brown.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.cburnett.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div class="card-box">
+      <div class="section-header">
+        <div>
+          <h2>Оформление доски и фигур</h2>
+          <p class="section-sub">28 стилей фигур и настройка цветов доски</p>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 280px; gap: 24px; align-items: start;">
+        <div>
+          <!-- 28 наборов фигур -->
+          <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 8px; margin-bottom: 14px;">
+            <h3 style="font-size: 14px; margin-bottom: 10px;">Стиль шахматных фигур (28 наборов)</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 6px; max-height: 210px; overflow-y: auto; padding-right: 4px;" id="pieceGrid"></div>
+          </div>
+
+          <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 8px; margin-bottom: 14px;">
+            <h3 style="font-size: 14px; margin-bottom: 10px;">Цветовая схема доски</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(95px, 1fr)); gap: 6px;">
+              <button class="btn btn-secondary" data-preset="#161512,#629924,#dee3e6,#8ca2ad">Турнирная</button>
+              <button class="btn btn-secondary" data-preset="#161512,#81b64c,#ebecd0,#779556">Классика</button>
+              <button class="btn btn-secondary" data-preset="#1b222c,#4fa3e3,#dee3e6,#4b7399">Океан</button>
+              <button class="btn btn-secondary" data-preset="#211a16,#d49a5a,#f0d9b5,#b58863">Дерево</button>
+              <button class="btn btn-secondary" data-preset="#121216,#9b51e0,#3b3b4d,#22222e">Графит</button>
+              <button class="btn btn-secondary" data-preset="#181818,#cc3333,#e0e0e0,#616161">Карбон</button>
+            </div>
+            <div style="display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap;">
+              <label style="display:flex;align-items:center;gap:6px;">Светлые: <input type="color" id="lPicker"></label>
+              <label style="display:flex;align-items:center;gap:6px;">Тёмные: <input type="color" id="dPicker"></label>
+              <label style="display:flex;align-items:center;gap:6px;">Акцент: <input type="color" id="aPicker"></label>
+            </div>
+          </div>
+
+          <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 8px;">
+            <h3 style="font-size: 14px; margin-bottom: 10px;">Фоновое изображение</h3>
+            <div style="display: flex; gap: 8px;">
+              <input id="bgUrl" class="input-field" placeholder="URL изображения (https://...)">
+              <button id="applyUrlBtn" class="btn">Применить</button>
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 10px;">
+              <label class="btn btn-secondary" style="cursor: pointer;">Загрузить файл<input type="file" accept="image/*" style="display: none;" id="bgFileInput"></label>
+              <button id="clearBgBtn" class="btn btn-secondary">Сбросить фон</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: var(--bg-main); border: 1px solid var(--border-subtle); padding: 16px; border-radius: 8px; text-align: center;">
+          <p class="section-sub" style="margin-bottom: 12px;">Предпросмотр</p>
+          <div id="previewBoard"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@8.3.3/chessground.min.js';
+    import { applySavedVisuals, renderSidebar } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('themes');
+
+    document.getElementById('lPicker').value = localStorage.getItem('nzb_sq_light') || '#dee3e6';
+    document.getElementById('dPicker').value = localStorage.getItem('nzb_sq_dark') || '#8ca2ad';
+    document.getElementById('aPicker').value = localStorage.getItem('nzb_accent') || '#629924';
+
+    // 28 ВЕКТОРНЫХ НАБОРОВ ФИГУР
+    const SETS = [
+      { id: 'cburnett', name: 'Cburnett' }, { id: 'merida', name: 'Merida' }, { id: 'alpha', name: 'Alpha' },
+      { id: 'maestro', name: 'Maestro 3D' }, { id: 'california', name: 'California' }, { id: 'cardinal', name: 'Cardinal' },
+      { id: 'companion', name: 'Companion' }, { id: 'gioco', name: 'Gioco' }, { id: 'pixel', name: 'Pixel' },
+      { id: 'horsey', name: 'Horsey' }, { id: 'anarcandy', name: 'Anarcandy' }, { id: 'caliente', name: 'Caliente' },
+      { id: 'celtic', name: 'Celtic' }, { id: 'chess7', name: 'Chess7' }, { id: 'chessnut', name: 'Chessnut' },
+      { id: 'cooke', name: 'Cooke' }, { id: 'dubrovny', name: 'Dubrovny' }, { id: 'fantasy', name: 'Fantasy' },
+      { id: 'fresca', name: 'Fresca' }, { id: 'governor', name: 'Governor' }, { id: 'icpieces', name: 'IC Pieces' },
+      { id: 'kiwen-suwi', name: 'Kiwen Suwi' }, { id: 'kosal', name: 'Kosal' }, { id: 'leipzig', name: 'Leipzig' },
+      { id: 'letter', name: 'Letter' }, { id: 'libra', name: 'Libra' }, { id: 'mpchess', name: 'MP Chess' },
+      { id: 'riohacha', name: 'Riohacha' }, { id: 'shapes', name: 'Shapes' }, { id: 'spatial', name: 'Spatial 3D' },
+      { id: 'staunty', name: 'Staunty 3D' }, { id: 'tatiana', name: 'Tatiana' }
+    ];
+
+    const grid = document.getElementById('pieceGrid');
+    const cur = localStorage.getItem('nzb_piece_theme') || 'cburnett';
+    SETS.forEach(s => {
+      const btn = document.createElement('button');
+      btn.className = `btn ${s.id === cur ? '' : 'btn-secondary'}`;
+      btn.style.padding = '8px 6px';
+      btn.style.fontSize = '12px';
+      btn.innerText = s.name;
+      btn.onclick = () => {
+        localStorage.setItem('nzb_piece_theme', s.id);
+        grid.querySelectorAll('button').forEach(b => b.className = 'btn btn-secondary');
+        btn.className = 'btn';
+        applySavedVisuals();
+      };
+      grid.appendChild(btn);
+    });
+
+    document.querySelectorAll('[data-preset]').forEach(btn => {
+      btn.onclick = () => {
+        const [bg, a, l, d] = btn.dataset.preset.split(',');
+        localStorage.setItem('nzb_bg_main', bg); localStorage.setItem('nzb_accent', a);
+        localStorage.setItem('nzb_sq_light', l); localStorage.setItem('nzb_sq_dark', d);
+        document.getElementById('lPicker').value = l; document.getElementById('dPicker').value = d; document.getElementById('aPicker').value = a;
+        applySavedVisuals();
+      };
+    });
+
+    ['lPicker', 'dPicker', 'aPicker'].forEach(id => {
+      document.getElementById(id).onchange = () => {
+        localStorage.setItem('nzb_sq_light', document.getElementById('lPicker').value);
+        localStorage.setItem('nzb_sq_dark', document.getElementById('dPicker').value);
+        localStorage.setItem('nzb_accent', document.getElementById('aPicker').value);
+        applySavedVisuals();
+      };
+    });
+
+    document.getElementById('applyUrlBtn').onclick = () => {
+      const u = document.getElementById('bgUrl').value.trim();
+      if (u) { localStorage.setItem('nzb_bg_img', u); applySavedVisuals(); }
+    };
+
+    document.getElementById('bgFileInput').onchange = (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      const r = new FileReader();
+      r.onload = ev => { try { localStorage.setItem('nzb_bg_img', ev.target.result); } catch {} applySavedVisuals(); };
+      r.readAsDataURL(f);
+    };
+
+    document.getElementById('clearBgBtn').onclick = () => {
+      localStorage.removeItem('nzb_bg_img');
+      applySavedVisuals();
+    };
+
+    Chessground(document.getElementById('previewBoard'), {
+      fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+      movable: { free: true }
+    });
+  </script>
+</body>
+</html>

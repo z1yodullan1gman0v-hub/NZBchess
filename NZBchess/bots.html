@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZB chess — Боты</title>
+  <link rel="icon" href="logo.png">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.base.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.brown.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chessground@8.3.3/assets/chessground.cburnett.css">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <nav id="sidebarMount"></nav>
+
+  <main class="main-content">
+    <div id="botSelectScreen" class="card-box">
+      <div class="section-header">
+        <div>
+          <h2>Выбор соперника</h2>
+          <p class="section-sub">6 лиг от 400 до 2500 ELO • Полоса перевеса и дебютная книга</p>
+        </div>
+        <button class="btn" id="openCustomBtn">Настроить своего бота</button>
+      </div>
+
+      <!-- Баннер, если позиция передана из Редактора -->
+      <div id="customFenNotice" style="display: none; padding: 10px 14px; background: rgba(98, 153, 36, 0.18); border: 1px solid var(--accent); border-radius: 8px; margin-bottom: 14px; justify-content: space-between; align-items: center; font-size: 13px;">
+        <span>Загружена пользовательская позиция из Редактора. Выберите бота для старта.</span>
+        <button id="clearCustomFenBtn" class="btn btn-secondary" style="padding: 5px 10px; font-size: 12px;">Сбросить</button>
+      </div>
+
+      <div class="setup-bar">
+        <div class="setup-group">
+          <label>Ваш цвет:</label>
+          <select id="colorSelect">
+            <option value="w" selected>Белые</option>
+            <option value="random">Случайный</option>
+            <option value="b">Чёрные</option>
+          </select>
+        </div>
+        <div class="setup-group">
+          <label>Контроль времени:</label>
+          <select id="timeSelect">
+            <option value="0|0" selected>Без часов</option>
+            <option value="60|0">1+0 (Пуля)</option>
+            <option value="180|0">3+0 (Блиц)</option>
+            <option value="180|2">3+2 (Блиц)</option>
+            <option value="300|0">5+0 (Блиц)</option>
+            <option value="600|0">10+0 (Рапид)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bots-grid" id="botsGrid"></div>
+    </div>
+
+    <div id="botGameScreen" class="game-layout" style="display: none;">
+      <div class="board-col">
+        <div class="player-bar" style="flex-direction: column; align-items: stretch;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <div id="botMono" class="bot-monogram">AI</div>
+              <span id="botTitle">Бот</span>
+              <span id="botCapturedStrip" class="captured-strip"></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span id="botColorLabel" class="section-sub">Чёрные</span>
+              <div id="botClock" class="clock-box" style="display: none;">05:00</div>
+            </div>
+          </div>
+          <div id="botSpeechText" class="bot-speech">Готов к партии. Ваш ход.</div>
+        </div>
+
+        <!-- ДОСКА С ВЕРТИКАЛЬНЫМ ИНДИКАТОРОМ ПЕРЕВЕСА -->
+        <div class="board-with-eval">
+          <div id="evalBarOuter" class="eval-bar-outer" title="Оценка позиции">
+            <div id="evalBarWhite" class="eval-bar-white" style="height: 50%;"></div>
+            <div id="evalBarScore" class="eval-bar-score adv-white">0.0</div>
+          </div>
+          <div id="board"></div>
+        </div>
+
+        <div class="player-bar">
+          <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <img id="playerAvatar" class="avatar-sm" src="" alt="Avatar">
+            <span id="playerTitle">Игрок</span>
+            <span id="playerCapturedStrip" class="captured-strip"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span id="playerColorLabel" style="color: var(--accent); font-size: 13px;">Белые</span>
+            <div id="playerClock" class="clock-box" style="display: none;">05:00</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar">
+        <div id="status" class="status-banner">Ваш ход</div>
+        <div id="openingBanner" class="opening-banner">Начальная позиция</div>
+        
+        <div style="padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); display: flex; flex-direction: column; gap: 4px;">
+          <div id="moveReviewBanner" class="eval-badge" style="margin: 0; width: 100%; justify-content: center;">
+            <span class="eval-symbol" style="background: #555;">•</span>
+            <span style="color: var(--text-muted);">Сделайте ход для анализа</span>
+          </div>
+          <div id="bestMoveHintLine" style="font-size: 11px; color: var(--accent); text-align: center; min-height: 15px;"></div>
+        </div>
+
+        <div class="review-nav-bar">
+          <button id="prevPlyBtn" class="btn btn-secondary">&lt; Назад</button>
+          <button id="nextPlyBtn" class="btn btn-secondary">Вперёд &gt;</button>
+          <button id="livePlyBtn" class="btn btn-secondary">В конец</button>
+        </div>
+
+        <div id="moveHistory" class="history-list"></div>
+
+        <div class="controls">
+          <div style="display: flex; gap: 6px;">
+            <button id="bestMoveToggleBtn" class="btn btn-secondary" style="flex: 1;">Лучший: ВКЛ</button>
+            <button id="flipBoardBtn" class="btn btn-secondary" title="Перевернуть доску">Перевернуть</button>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button id="voiceToggleBtn" class="btn btn-secondary" style="flex: 1;">Голос: ВКЛ</button>
+            <button id="undoBtn" class="btn btn-secondary" style="flex: 1;">Отменить</button>
+          </div>
+          <button id="resetBtn" class="btn">Новая партия</button>
+          <button id="backBtn" class="btn btn-secondary">К списку ботов</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <div id="customModal" class="modal-overlay">
+    <div class="modal-box">
+      <h3 style="margin-bottom: 12px;">Настройка бота</h3>
+      <label class="section-sub">Имя:</label>
+      <input id="cName" class="input-field" style="margin: 6px 0 12px;" value="Engine NZB">
+      <label class="section-sub">Рейтинг: <b id="cEloTxt" style="color: var(--accent);">1200</b> ELO</label>
+      <input id="cElo" type="range" min="400" max="2500" step="50" value="1200" style="width: 100%; margin: 8px 0 12px;">
+      <label class="section-sub">Задержка хода:</label>
+      <select id="cDelay" style="margin: 6px 0 16px;">
+        <option value="100">0.1 сек (Мгновенно)</option>
+        <option value="450" selected>0.5 сек (Стандарт)</option>
+        <option value="1000">1.0 сек (Медленно)</option>
+      </select>
+      <div style="display: flex; gap: 8px;">
+        <button id="startCustomBtn" class="btn" style="flex: 1;">Начать матч</button>
+        <button id="closeCustomBtn" class="btn btn-secondary">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="promoModal" class="modal-overlay">
+    <div class="modal-box" style="text-align: center;">
+      <h3 style="margin-bottom: 14px;">Выберите фигуру</h3>
+      <div style="display: flex; gap: 8px; justify-content: center;">
+        <button class="btn" data-p="q">Ферзь</button>
+        <button class="btn" data-p="r">Ладья</button>
+        <button class="btn" data-p="b">Слон</button>
+        <button class="btn" data-p="n">Конь</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script type="module">
+    import { Chessground } from 'https://cdn.jsdelivr.net/npm/chessground@8.3.3/chessground.min.js';
+    import {
+      applySavedVisuals, renderSidebar, DEFAULT_AVATAR, showMatchResultModal,
+      evaluateMoveQuality, enableMobileDrawing, playChessSound, formatClock,
+      detectOpeningName, getCapturedMaterial, getWhiteAdvantagePawns
+    } from './core.js';
+
+    applySavedVisuals();
+    renderSidebar('bots');
+
+    // Проверяем, есть ли пользовательская позиция из Редактора
+    let customStartFen = localStorage.getItem('nzb_custom_start_fen') || '';
+    if (customStartFen) {
+      document.getElementById('customFenNotice').style.display = 'flex';
+      document.getElementById('clearCustomFenBtn').onclick = () => {
+        localStorage.removeItem('nzb_custom_start_fen');
+        customStartFen = '';
+        document.getElementById('customFenNotice').style.display = 'none';
+      };
+    }
+
+    const BOTS = [
+      { league: 'Начинающий', code: 'TM', n: 'Тёма', e: 400, d: 300, pitch: 1.25, desc: 'Базовые ходы без расчёта' },
+      { code: 'RX', n: 'Рекс', e: 500, d: 320, pitch: 1.1, desc: 'Охотится за открытыми пешками' },
+      { league: 'Знающий', code: 'MZ', n: 'Мурзик', e: 600, d: 350, pitch: 1.15, desc: 'Ранние вылазки лёгкими фигурами' },
+      { code: 'HM', n: 'Хома', e: 650, d: 360, pitch: 1.2, desc: 'Замечает простые двойные удары' },
+      { code: 'AL', n: 'Алиса', e: 700, d: 380, pitch: 1.15, desc: 'Агрессивная игра в центре' },
+      { league: 'Средний', code: 'EN', n: 'Енот', e: 725, d: 390, pitch: 1.05, desc: 'Тактический стиль с риском' },
+      { code: 'PT', n: 'Потап', e: 750, d: 400, pitch: 0.85, desc: 'Давление тяжёлыми фигурами' },
+      { code: 'WL', n: 'Волк', e: 800, d: 420, pitch: 0.9, desc: 'Наказывает за грубые зевки' },
+      { league: 'Продвинутый', code: 'SK', n: 'Сокол', e: 900, d: 440, pitch: 1.0, desc: 'Контроль открытых диагоналей' },
+      { code: 'VK', n: 'Виктор', e: 1100, d: 460, pitch: 0.95, desc: 'Стабильный клубный разрядник' },
+      { league: 'Мастер', code: 'KG', n: 'Каге', e: 1400, d: 500, pitch: 0.9, desc: 'Контратаки и плотная защита' },
+      { code: 'VL', n: 'Влад', e: 1900, d: 560, pitch: 0.8, desc: 'Точный расчёт в эндшпиле' },
+      { league: 'Гроссмейстер', code: 'PR', n: 'Профессор', e: 2000, d: 600, pitch: 0.85, desc: 'Глубокая дебютная теория' },
+      { code: 'OR', n: 'Оракул', e: 2300, d: 650, pitch: 0.8, desc: 'Многоходовые комбинации' },
+      { code: 'MG', n: 'Магнус NZB', e: 2500, d: 700, pitch: 0.85, desc: 'Максимальный уровень клуба' }
+    ];
+
+    const grid = document.getElementById('botsGrid');
+    BOTS.forEach(b => {
+      if (b.league) {
+        const h = document.createElement('div');
+        h.className = 'league-title';
+        h.innerText = b.league;
+        grid.appendChild(h);
+      }
+      const div = document.createElement('div');
+      div.className = 'bot-card';
+      div.innerHTML = `
+        <div class="bot-card-top">
+          <div class="bot-monogram">${b.code || 'AL'}</div>
+          <span class="elo-tag">${b.e}</span>
+        </div>
+        <div style="font-weight: 600; font-size: 14px;">${b.n}</div>
+        <div class="section-sub" style="font-size: 12px;">${b.desc}</div>
+      `;
+      div.onclick = () => launch(b.code || 'AL', b.n, b.e, b.d, b.pitch);
+      grid.appendChild(div);
+    });
+
+    document.getElementById('openCustomBtn').onclick = () => document.getElementById('customModal').style.display = 'flex';
+    document.getElementById('closeCustomBtn').onclick = () => document.getElementById('customModal').style.display = 'none';
+    document.getElementById('cElo').oninput = e => document.getElementById('cEloTxt').innerText = e.target.value;
+    document.getElementById('startCustomBtn').onclick = () => {
+      document.getElementById('customModal').style.display = 'none';
+      const n = document.getElementById('cName').value.trim() || 'Engine NZB';
+      const e = parseInt(document.getElementById('cElo').value);
+      launch('AI', n, e, parseInt(document.getElementById('cDelay').value), 1.0);
+    };
+
+    const game = new Chess();
+    let cg = null, botCode = 'AI', botName = 'Бот', botElo = 1100, botDelay = 450, botPitch = 1.0, pending = null;
+    let playerColor = 'w', botColor = 'b', boardOrientation = 'white';
+    let voiceEnabled = true, showBestMove = true, moveHistoryData = [], viewPlyIndex = -1, isMatchEnded = false;
+    let timeBase = 0, timeInc = 0, playerTime = 0, botTime = 0, clockTimer = null;
+    const pName = localStorage.getItem('nzb_nick') || 'Player_NZB';
+
+    document.getElementById('bestMoveToggleBtn').onclick = () => {
+      showBestMove = !showBestMove;
+      document.getElementById('bestMoveToggleBtn').innerText = showBestMove ? 'Лучший: ВКЛ' : 'Лучший: ВЫКЛ';
+      const idx = viewPlyIndex === -1 ? moveHistoryData.length - 1 : viewPlyIndex;
+      if (idx >= 0) inspectPly(idx);
+    };
+
+    document.getElementById('flipBoardBtn').onclick = () => {
+      boardOrientation = boardOrientation === 'white' ? 'black' : 'white';
+      if (cg) cg.set({ orientation: boardOrientation });
+      const evalOuter = document.getElementById('evalBarOuter');
+      evalOuter.classList.toggle('flipped', boardOrientation === 'black');
+    };
+
+    document.getElementById('voiceToggleBtn').onclick = () => {
+      voiceEnabled = !voiceEnabled;
+      document.getElementById('voiceToggleBtn').innerText = voiceEnabled ? 'Голос: ВКЛ' : 'Голос: ВЫКЛ';
+      if (!voiceEnabled && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    };
+
+    function botSpeak(text) {
+      document.getElementById('botSpeechText').innerText = text;
+      if (!voiceEnabled || !('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const spoken = text
+        .replace(/\ba(\d)/g, 'а $1').replace(/\bb(\d)/g, 'бэ $1')
+        .replace(/\bc(\d)/g, 'цэ $1').replace(/\bd(\d)/g, 'дэ $1')
+        .replace(/\be(\d)/g, 'е $1').replace(/\bf(\d)/g, 'эф $1')
+        .replace(/\bg(\d)/g, 'жэ $1').replace(/\bh(\d)/g, 'аш $1');
+      const u = new SpeechSynthesisUtterance(spoken);
+      u.lang = 'ru-RU';
+      u.pitch = botPitch;
+      u.rate = 1.08;
+      window.speechSynthesis.speak(u);
+    }
+
+    function updateEvalAndMaterialUI(chessObj = game) {
+      // 1. Полоса перевеса
+      const adv = getWhiteAdvantagePawns(chessObj);
+      document.getElementById('evalBarWhite').style.height = `${adv.whitePct}%`;
+      const scoreEl = document.getElementById('evalBarScore');
+      scoreEl.innerText = adv.text;
+      scoreEl.className = 'eval-bar-score ' + (adv.isWhiteAdv ? 'adv-white' : 'adv-black');
+
+      // 2. Срубленные фигуры и разница очков
+      const mat = getCapturedMaterial(chessObj);
+      document.getElementById('playerCapturedStrip').innerHTML = playerColor === 'w' ? mat.byWhiteHtml : mat.byBlackHtml;
+      document.getElementById('botCapturedStrip').innerHTML = botColor === 'w' ? mat.byWhiteHtml : mat.byBlackHtml;
+
+      // 3. Дебют
+      document.getElementById('openingBanner').innerText = detectOpeningName(game.history());
+    }
+
+    function startClocks() {
+      clearInterval(clockTimer);
+      const pClockEl = document.getElementById('playerClock');
+      const bClockEl = document.getElementById('botClock');
+      if (timeBase <= 0) {
+        pClockEl.style.display = 'none'; bClockEl.style.display = 'none'; return;
+      }
+      pClockEl.style.display = 'block'; bClockEl.style.display = 'block';
+      updateClockDisplay();
+
+      clockTimer = setInterval(() => {
+        if (isMatchEnded || game.game_over()) return clearInterval(clockTimer);
+        if (game.turn() === playerColor) {
+          playerTime -= 0.2;
+          if (playerTime <= 0) {
+            playerTime = 0; updateClockDisplay();
+            finishMatch(false, 'Время истекло');
+          }
+        } else {
+          botTime -= 0.2;
+          if (botTime <= 0) {
+            botTime = 0; updateClockDisplay();
+            finishMatch(true, 'У соперника закончилось время');
+          }
+        }
+        updateClockDisplay();
+      }, 200);
+    }
+
+    function updateClockDisplay() {
+      const pEl = document.getElementById('playerClock');
+      const bEl = document.getElementById('botClock');
+      pEl.innerText = formatClock(playerTime);
+      bEl.innerText = formatClock(botTime);
+      pEl.className = 'clock-box' + (game.turn() === playerColor && !isMatchEnded ? (playerTime <= 15 ? ' low-time' : ' active-clock') : '');
+      bEl.className = 'clock-box' + (game.turn() === botColor && !isMatchEnded ? (botTime <= 15 ? ' low-time' : ' active-clock') : '');
+    }
+
+    function finishMatch(playerWon, reasonText) {
+      if (isMatchEnded) return;
+      isMatchEnded = true;
+      clearInterval(clockTimer);
+      cg.set({ movable: { color: null } });
+
+      const st = document.getElementById('status');
+      st.innerText = playerWon ? `Победа — ${reasonText}` : `Поражение — ${reasonText}`;
+      st.style.color = playerWon ? 'var(--accent)' : 'var(--danger)';
+
+      showMatchResultModal({
+        isWin: playerWon,
+        reason: reasonText,
+        oppName: botName,
+        oppCodeOrAvatar: botCode,
+        oppElo: botElo,
+        onRematch: () => launch(botCode, botName, botElo, botDelay, botPitch)
+      });
+
+      const updatedElo = localStorage.getItem('nzb_elo') || 800;
+      document.getElementById('playerTitle').innerText = `${pName} (${updatedElo})`;
+    }
+
+    window.inspectPly = function(plyIdx) {
+      if (plyIdx < 0 || plyIdx >= moveHistoryData.length) return;
+      viewPlyIndex = plyIdx;
+      const item = moveHistoryData[plyIdx];
+      const isLatest = (plyIdx === moveHistoryData.length - 1);
+      const myOrient = playerColor === 'w' ? 'white' : 'black';
+
+      const canMoveNow = isLatest && !isMatchEnded && !game.game_over();
+      cg.set({
+        fen: item.fenAfter,
+        lastMove: [item.orig, item.dest],
+        movable: { color: canMoveNow ? myOrient : null, dests: canMoveNow && game.turn() === playerColor ? dests() : new Map() }
+      });
+
+      const tempChess = new Chess(item.fenAfter);
+      updateEvalAndMaterialUI(tempChess);
+
+      const ev = item.evalObj;
+      const banner = document.getElementById('moveReviewBanner');
+      banner.style.borderColor = ev.color;
+      banner.innerHTML = `
+        <span class="eval-symbol" style="background:${ev.color};">${ev.symbol}</span>
+        <span style="color:${ev.color};">${item.san} — ${ev.label}</span>
+      `;
+
+      const shapes = [{ orig: item.orig, dest: item.dest, brush: ev.brush }];
+      const hintLine = document.getElementById('bestMoveHintLine');
+
+      if (showBestMove && ev.bestOrig && ev.bestDest && (ev.bestOrig !== item.orig || ev.bestDest !== item.dest)) {
+        shapes.push({ orig: ev.bestOrig, dest: ev.bestDest, brush: 'green' });
+        hintLine.innerText = `Лучший ход был: ${ev.bestSan} (${ev.bestOrig} → ${ev.bestDest})`;
+      } else if (showBestMove) {
+        hintLine.innerText = 'Сделан сильнейший ход в позиции';
+      } else {
+        hintLine.innerText = '';
+      }
+
+      cg.setShapes(shapes);
+      renderHistoryList();
+    };
+
+    document.getElementById('prevPlyBtn').onclick = () => {
+      if (!moveHistoryData.length) return;
+      const cur = viewPlyIndex === -1 ? moveHistoryData.length - 1 : viewPlyIndex;
+      if (cur > 0) inspectPly(cur - 1);
+    };
+
+    document.getElementById('nextPlyBtn').onclick = () => {
+      if (!moveHistoryData.length) return;
+      const cur = viewPlyIndex === -1 ? moveHistoryData.length - 1 : viewPlyIndex;
+      if (cur < moveHistoryData.length - 1) inspectPly(cur + 1);
+    };
+
+    document.getElementById('livePlyBtn').onclick = () => {
+      if (moveHistoryData.length) inspectPly(moveHistoryData.length - 1);
+    };
+
+    document.addEventListener('keydown', (e) => {
+      if (document.getElementById('botGameScreen').style.display === 'none') return;
+      if (e.key === 'ArrowLeft') document.getElementById('prevPlyBtn').click();
+      if (e.key === 'ArrowRight') document.getElementById('nextPlyBtn').click();
+    });
+
+    function reactToEvaluation(evalObj, m) {
+      if (game.in_checkmate()) return botSpeak('Мат. Отличная партия с вашей стороны.');
+      if (evalObj.symbol === '!!') return botSpeak(`Бриллиантовый ход на ${m.to}! Невероятная тактика.`);
+      if (evalObj.symbol === '??') return botSpeak(`Ого, зевок на ${m.to}! Спасибо за подарок.`);
+      if (evalObj.symbol === '?') return botSpeak(`Ошибка на ${m.to}, позиция ухудшилась.`);
+      if (evalObj.symbol === '!') return botSpeak(`Сильный ход в ${m.to}!`);
+      if (game.in_check()) return botSpeak(`Шах на ${m.to}.`);
+    }
+
+    function dests() {
+      const m = new Map();
+      game.SQUARES.forEach(s => { const ms = game.moves({ square: s, verbose: true }); if (ms.length) m.set(s, ms.map(x => x.to)); });
+      return m;
+    }
+
+    function launch(code, name, elo, delay, pitch) {
+      botCode = code; botName = name; botElo = elo; botDelay = delay; botPitch = pitch;
+      moveHistoryData = [];
+      viewPlyIndex = -1;
+      isMatchEnded = false;
+
+      const chosenCol = document.getElementById('colorSelect').value;
+      playerColor = chosenCol === 'random' ? (Math.random() < 0.5 ? 'w' : 'b') : chosenCol;
+      botColor = playerColor === 'w' ? 'b' : 'w';
+      boardOrientation = playerColor === 'w' ? 'white' : 'black';
+
+      const [tBase, tInc] = document.getElementById('timeSelect').value.split('|').map(Number);
+      timeBase = tBase; timeInc = tInc;
+      playerTime = timeBase; botTime = timeBase;
+
+      const curElo = localStorage.getItem('nzb_elo') || 800;
+
+      document.getElementById('botSelectScreen').style.display = 'none';
+      document.getElementById('botGameScreen').style.display = 'flex';
+      document.getElementById('botMono').innerText = code;
+      document.getElementById('botTitle').innerText = `${name} (${elo})`;
+      document.getElementById('botColorLabel').innerText = botColor === 'w' ? 'Белые' : 'Чёрные';
+      document.getElementById('playerAvatar').src = localStorage.getItem('nzb_avatar') || DEFAULT_AVATAR;
+      document.getElementById('playerTitle').innerText = `${pName} (${curElo})`;
+      document.getElementById('playerColorLabel').innerText = playerColor === 'w' ? 'Белые' : 'Чёрные';
+
+      document.getElementById('evalBarOuter').classList.toggle('flipped', boardOrientation === 'black');
+      document.getElementById('moveReviewBanner').innerHTML = `<span class="eval-symbol" style="background:#555;">•</span><span style="color:var(--text-muted);">Сделайте ход для анализа</span>`;
+      document.getElementById('bestMoveHintLine').innerText = '';
+
+      if (customStartFen) {
+        game.load(customStartFen);
+        localStorage.removeItem('nzb_custom_start_fen');
+        customStartFen = '';
+        document.getElementById('customFenNotice').style.display = 'none';
+      } else {
+        game.reset();
+      }
+
+      cg = Chessground(document.getElementById('board'), {
+        fen: game.fen(),
+        orientation: boardOrientation,
+        turnColor: game.turn() === 'w' ? 'white' : 'black',
+        movable: {
+          color: boardOrientation,
+          free: false,
+          dests: game.turn() === playerColor ? dests() : new Map(),
+          events: {
+            after: (orig, dest) => {
+              const p = game.get(orig);
+              if (p && p.type === 'p' && ((p.color === 'w' && dest[1] === '8') || (p.color === 'b' && dest[1] === '1'))) {
+                pending = { from: orig, to: dest };
+                document.getElementById('promoModal').style.display = 'flex';
+                return;
+              }
+              doMove({ from: orig, to: dest });
+            }
+          }
+        },
+        premovable: { enabled: true, showDests: true, castle: true },
+        drawable: { enabled: true, visible: true }
+      });
+
+      enableMobileDrawing(cg, 'board');
+      updateEvalAndMaterialUI(game);
+      startClocks();
+      updateUI();
+
+      if (!game.game_over() && game.turn() === botColor) {
+        botSpeak('Начинаю партию. Ваш ответ.');
+        setTimeout(botMove, 450);
+      } else {
+        botSpeak('Партия началась. Ваш ход.');
+      }
+    }
+
+    document.querySelectorAll('#promoModal button').forEach(b => {
+      b.onclick = () => {
+        document.getElementById('promoModal').style.display = 'none';
+        doMove({ from: pending.from, to: pending.to, promotion: b.dataset.p });
+      };
+    });
+
+    function triggerMoveSound(exec) {
+      if (game.in_check()) playChessSound('check');
+      else if (exec.captured) playChessSound('capture');
+      else playChessSound('move');
+    }
+
+    function doMove(m) {
+      if (isMatchEnded || game.turn() !== playerColor) return;
+      const fenBefore = game.fen();
+      const exec = game.move(m);
+      if (!exec) return;
+      const fenAfter = game.fen();
+
+      if (timeBase > 0) playerTime += timeInc;
+      triggerMoveSound(exec);
+
+      const evalObj = evaluateMoveQuality(fenBefore, exec, fenAfter);
+      moveHistoryData.push({ fenAfter, san: exec.san, orig: exec.from, dest: exec.to, evalObj });
+
+      sync();
+      inspectPly(moveHistoryData.length - 1);
+      updateUI();
+      reactToEvaluation(evalObj, exec);
+
+      if (!isMatchEnded && !game.game_over() && game.turn() === botColor) {
+        setTimeout(botMove, botDelay + 200);
+      }
+    }
+
+    function sync() {
+      const myOrient = playerColor === 'w' ? 'white' : 'black';
+      const active = !isMatchEnded && !game.game_over();
+      cg.set({
+        fen: game.fen(),
+        turnColor: game.turn() === 'w' ? 'white' : 'black',
+        check: game.in_check(),
+        movable: {
+          color: active ? myOrient : null,
+          dests: active && game.turn() === playerColor ? dests() : new Map()
+        }
+      });
+      if (active && game.turn() === playerColor) {
+        cg.playPremove();
+      }
+    }
+
+    function botMove() {
+      if (isMatchEnded || game.turn() !== botColor) return;
+      const moves = game.moves({ verbose: true });
+      if (!moves.length) return;
+
+      const fenBefore = game.fen();
+      const blunderChance = Math.max(0, (1100 - botElo) / 1100);
+      let chosen = null;
+
+      if (Math.random() < blunderChance) {
+        chosen = moves[Math.floor(Math.random() * moves.length)];
+      } else {
+        const val = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+        const scored = moves.map(m => {
+          game.move(m);
+          if (game.in_checkmate()) { game.undo(); return { move: m, score: 999999 }; }
+          let sc = m.captured ? val[m.captured] : 0;
+          if (botElo >= 1100) {
+            if (['d4','e4','d5','e5'].includes(m.to)) sc += 35;
+            if (m.flags.includes('k') || m.flags.includes('q')) sc += 60;
+            if (game.in_check()) sc += 45;
+            if (game.in_draw()) sc -= 150;
+          }
+          if (botElo >= 750) {
+            let maxL = 0;
+            for (let pm of game.moves({ verbose: true })) if (pm.captured && val[pm.captured] > maxL) maxL = val[pm.captured];
+            sc -= maxL * Math.min(1.0, (botElo - 500) / 800);
+          }
+          game.undo();
+          return { move: m, score: sc + (Math.random() * 12 - 6) };
+        }).sort((a, b) => b.score - a.score);
+
+        let idx = 0;
+        if (botElo < 850 && scored.length > 2) idx = Math.floor(Math.random() * 3);
+        else if (botElo < 1500 && scored.length > 1 && Math.random() < 0.25) idx = 1;
+        chosen = scored[idx].move;
+      }
+
+      const exec = game.move(chosen);
+      if (timeBase > 0) botTime += timeInc;
+      triggerMoveSound(exec);
+
+      const fenAfter = game.fen();
+      const evalObj = evaluateMoveQuality(fenBefore, exec, fenAfter);
+      moveHistoryData.push({ fenAfter, san: exec.san, orig: exec.from, dest: exec.to, evalObj });
+
+      inspectPly(moveHistoryData.length - 1);
+      sync();
+      updateUI();
+
+      if (game.in_checkmate()) botSpeak(`Мат на ${chosen.to}. Победа за мной.`);
+      else if (game.in_check()) botSpeak(`Шах с поля ${chosen.to}.`);
+    }
+
+    function renderHistoryList() {
+      const box = document.getElementById('moveHistory');
+      box.innerHTML = '';
+      const activeIdx = viewPlyIndex === -1 ? moveHistoryData.length - 1 : viewPlyIndex;
+
+      for (let i = 0; i < moveHistoryData.length; i += 2) {
+        const wItem = moveHistoryData[i];
+        const bItem = moveHistoryData[i + 1];
+
+        const wTag = `<span class="hist-tag" style="background:${wItem.evalObj.color};">${wItem.evalObj.symbol}</span>`;
+        const bTag = bItem ? `<span class="hist-tag" style="background:${bItem.evalObj.color};">${bItem.evalObj.symbol}</span>` : '';
+
+        const wActive = (i === activeIdx) ? 'active-ply' : '';
+        const bActive = (i + 1 === activeIdx) ? 'active-ply' : '';
+
+        box.innerHTML += `
+          <div class="move-row">
+            <span class="move-num">${i / 2 + 1}.</span>
+            <span class="move-w">
+              <span class="move-cell ${wActive}" onclick="inspectPly(${i})">${wItem.san}${wTag}</span>
+            </span>
+            <span class="move-b">
+              ${bItem ? `<span class="move-cell ${bActive}" onclick="inspectPly(${i + 1})">${bItem.san}${bTag}</span>` : ''}
+            </span>
+          </div>
+        `;
+      }
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function updateUI() {
+      if (isMatchEnded) return;
+      const st = document.getElementById('status');
+      if (game.in_checkmate()) {
+        const win = game.turn() !== playerColor;
+        finishMatch(win, win ? 'Вы поставили шах и мат' : `${botName} поставил шах и мат`);
+      } else if (game.in_draw()) {
+        isMatchEnded = true;
+        clearInterval(clockTimer);
+        st.innerText = 'Ничья'; st.style.color = 'var(--text-muted)';
+        showMatchResultModal({
+          isWin: false, isDraw: true, reason: 'Партия завершилась вничью',
+          oppName: botName, oppCodeOrAvatar: botCode, oppElo: botElo,
+          onRematch: () => launch(botCode, botName, botElo, botDelay, botPitch)
+        });
+      } else {
+        st.innerText = (game.turn() === playerColor ? 'Ваш ход' : 'Ход соперника') + (game.in_check() ? ' (Шах)' : '');
+        st.style.color = 'var(--accent)';
+      }
+      renderHistoryList();
+    }
+
+    document.getElementById('undoBtn').onclick = () => {
+      if (isMatchEnded || game.game_over()) return;
+      game.undo(); game.undo();
+      moveHistoryData.pop(); moveHistoryData.pop();
+      viewPlyIndex = moveHistoryData.length - 1;
+      if (cg) cg.setShapes([]);
+      sync();
+      updateEvalAndMaterialUI(game);
+      if (viewPlyIndex >= 0) inspectPly(viewPlyIndex);
+      else {
+        document.getElementById('moveReviewBanner').innerHTML = `<span class="eval-symbol" style="background:#555;">•</span><span style="color:var(--text-muted);">Сделайте ход для анализа</span>`;
+        document.getElementById('bestMoveHintLine').innerText = '';
+      }
+      updateUI();
+    };
+    document.getElementById('resetBtn').onclick = () => launch(botCode, botName, botElo, botDelay, botPitch);
+    document.getElementById('backBtn').onclick = () => {
+      clearInterval(clockTimer);
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      document.getElementById('botGameScreen').style.display = 'none';
+      document.getElementById('botSelectScreen').style.display = 'block';
+    };
+  </script>
+</body>
+</html>
